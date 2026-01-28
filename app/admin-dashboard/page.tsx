@@ -10,288 +10,326 @@ import { useUser, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
 export default function AdminDashboard() {
-  const { user, isLoaded } = useUser();
+  const { isLoaded, user } = useUser();
   const router = useRouter();
 
+  // Data Queries
   const games = useQuery(api.games.get);
   const users = useQuery(api.users.get);
+  const currentUser = useQuery(api.users.getMe);
+
+  // Mutations
   const addGame = useMutation(api.games.create);
   const updateGame = useMutation(api.games.update);
   const deleteGame = useMutation(api.games.remove);
-  const addUser = useMutation(api.users.create); // Mutation to add a user
-  const updateUser = useMutation(api.users.update); // Mutation to update user role
+  const addUser = useMutation(api.users.create);
+  const updateUser = useMutation(api.users.update);
   const deleteUser = useMutation(api.users.remove);
 
+  // States
   const [newGame, setNewGame] = useState({ name: "", link: "", image: "" });
-  const [newUser, setNewUser] = useState({ email: "", role: "user" }); // State for new user
+  const [newUser, setNewUser] = useState({ email: "", role: "user" });
   const [editingId, setEditingId] = useState<Id<"games"> | null>(null);
-  const [activeTab, setActiveTab] = useState<"games" | "users">("games"); // Toggle between games and users
+  const [activeTab, setActiveTab] = useState<"games" | "users">("games");
 
-  // SECURITY LOCK: If someone tries to visit this URL and isn't the admin, kick them out
+  // FINAL SECURITY CHECK:
+  // This logic is now identical to the Hub to prevent the redirection loop.
   useEffect(() => {
-    if (
-      isLoaded &&
-      user?.emailAddresses[0].emailAddress !== "nrnbmadmal@gmail.com"
-    ) {
-      router.push("/dashboard");
-    }
-  }, [isLoaded, user, router]);
+    if (isLoaded) {
+      const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
 
-  if (!isLoaded)
+      // List of absolute admin emails
+      const isFailSafeAdmin =
+        userEmail === "nrnbmadmal@gmail.com" ||
+        userEmail === "baani@baazidaily.com";
+
+      const isDatabaseAdmin = currentUser?.role === "admin";
+
+      // If NOT a fail-safe admin AND the database has finished loading and says NOT an admin
+      if (!isFailSafeAdmin && currentUser !== undefined && !isDatabaseAdmin) {
+        router.push("/dashboard");
+      }
+    }
+  }, [isLoaded, user, currentUser, router]);
+
+  // Keep the "Verifying" screen visible until we are sure
+  if (
+    !isLoaded ||
+    (currentUser === undefined &&
+      !["nrnbmadmal@gmail.com", "baani@baazidaily.com"].includes(
+        user?.primaryEmailAddress?.emailAddress?.toLowerCase() || "",
+      ))
+  ) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white font-sans uppercase italic">
-        Secure Login...
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-black italic uppercase tracking-tighter">
+        <div className="animate-pulse text-yellow-500">
+          Authenticating Admin...
+        </div>
       </div>
     );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col p-8 font-sans">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col p-4 md:p-8 font-sans">
+      {/* Header */}
       <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-6 max-w-[1600px] mx-auto w-full">
-        <h1 className="text-3xl font-black text-yellow-500 uppercase italic tracking-tighter">
-          Admin Panel
-        </h1>
+        <div>
+          <h1 className="text-3xl font-black text-yellow-500 uppercase tracking-tighter">
+            Admin Panel
+          </h1>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
+            Platform Control Hub
+          </p>
+        </div>
         <div className="flex items-center gap-4">
+          <Button
+            onClick={() => router.push("/dashboard")}
+            className="bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase text-sm px-10 py-4 rounded-2xl shadow-xl transition-all duration-200 border-none"
+          >
+            Back to Hub
+          </Button>
           <UserButton afterSignOutUrl="/" />
         </div>
       </div>
 
-      {/* Tab Buttons */}
-      <div className="flex justify-center gap-4 mb-8">
-        <Button
+      {/* Tab Switcher */}
+      <div className="flex justify-center gap-2 mb-10 bg-gray-800/30 p-1 rounded-2xl w-fit mx-auto border border-white/5 shadow-2xl">
+        <button
           onClick={() => setActiveTab("games")}
-          className={`px-6 py-2 font-bold uppercase ${
-            activeTab === "games"
-              ? "bg-orange-400 text-gray-900"
-              : "bg-gray-800 text-gray-400"
-          } rounded-lg`}
+          className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all duration-300 ${activeTab === "games" ? "bg-orange-500 text-black shadow-lg" : "text-gray-500 hover:text-white"}`}
         >
-          Manage Games
-        </Button>
-        <Button
+          Manage Library
+        </button>
+        <button
           onClick={() => setActiveTab("users")}
-          className={`px-6 py-2 font-bold uppercase ${
-            activeTab === "users"
-              ? "bg-orange-400 text-gray-900"
-              : "bg-gray-800 text-gray-400"
-          } rounded-lg`}
+          className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all duration-300 ${activeTab === "users" ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 hover:text-white"}`}
         >
-          Manage Users
-        </Button>
+          User Database
+        </button>
       </div>
 
-      {/* Conditional Rendering Based on Active Tab */}
-      {activeTab === "games" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 max-w-[1600px] mx-auto w-full">
-          {/* Management Form */}
-          <div className="lg:col-span-1 bg-gray-800/50 p-6 rounded-3xl border border-white/5 h-fit sticky top-8 backdrop-blur-md">
-            <h2 className="text-xl font-bold mb-6 text-orange-400 uppercase italic">
-              {editingId ? "Edit Existing Game" : "Add New Game"}
-            </h2>
-            <div className="space-y-5">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-500 ml-1">
-                  Title
-                </label>
-                <Input
-                  placeholder="Game Name"
-                  value={newGame.name}
-                  onChange={(e) =>
-                    setNewGame({ ...newGame, name: e.target.value })
-                  }
-                  className="bg-gray-900 border-gray-700 text-white"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-500 ml-1">
-                  Iframe Source
-                </label>
-                <Input
-                  placeholder="https://..."
-                  value={newGame.link}
-                  onChange={(e) =>
-                    setNewGame({ ...newGame, link: e.target.value })
-                  }
-                  className="bg-gray-900 border-gray-700 text-white"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold text-gray-500 ml-1">
-                  Thumbnail URL
-                </label>
-                <Input
-                  placeholder="https://..."
-                  value={newGame.image}
-                  onChange={(e) =>
-                    setNewGame({ ...newGame, image: e.target.value })
-                  }
-                  className="bg-gray-900 border-gray-700 text-white"
-                />
-              </div>
-
-              <div className="pt-4 flex flex-col gap-2">
-                <Button
-                  onClick={() => {
-                    if (editingId) {
-                      updateGame({
-                        id: editingId,
-                        name: newGame.name,
-                        link: newGame.link,
-                        image: newGame.image,
-                      });
-                      setEditingId(null);
-                    } else {
-                      if (newGame.name && newGame.link) addGame(newGame);
+      <div className="max-w-[1600px] mx-auto w-full">
+        {activeTab === "games" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            {/* Game Form */}
+            <div className="bg-gray-800/50 p-6 rounded-3xl border border-white/5 h-fit sticky top-8 backdrop-blur-md shadow-2xl">
+              <h2 className="text-xl font-black mb-6 text-orange-400 uppercase">
+                {editingId ? "Update Entry" : "New Entry"}
+              </h2>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
+                    Game Title
+                  </label>
+                  <Input
+                    value={newGame.name}
+                    onChange={(e) =>
+                      setNewGame({ ...newGame, name: e.target.value })
                     }
-                    setNewGame({ name: "", link: "", image: "" });
-                  }}
-                  className="w-full bg-green-600 hover:bg-green-700 font-bold uppercase italic"
-                >
-                  {editingId ? "Save Changes" : "Publish Game"}
-                </Button>
-                {editingId && (
+                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
+                    Embed URL
+                  </label>
+                  <Input
+                    value={newGame.link}
+                    onChange={(e) =>
+                      setNewGame({ ...newGame, link: e.target.value })
+                    }
+                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
+                    Image URL
+                  </label>
+                  <Input
+                    value={newGame.image}
+                    onChange={(e) =>
+                      setNewGame({ ...newGame, image: e.target.value })
+                    }
+                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
+                  />
+                </div>
+
+                <div className="pt-4 flex flex-col gap-2">
                   <Button
-                    variant="ghost"
-                    className="text-gray-400"
                     onClick={() => {
-                      setEditingId(null);
+                      if (editingId) {
+                        updateGame({
+                          id: editingId,
+                          name: newGame.name,
+                          link: newGame.link,
+                          image: newGame.image,
+                        });
+                        setEditingId(null);
+                      } else if (newGame.name && newGame.link) {
+                        addGame(newGame);
+                      }
                       setNewGame({ name: "", link: "", image: "" });
                     }}
+                    className="w-full bg-green-600 hover:bg-green-700 font-black py-7 text-lg shadow-xl uppercase rounded-2xl"
                   >
-                    Cancel Edit
+                    {editingId ? "Save Changes" : "Publish Game"}
                   </Button>
-                )}
+                  {editingId && (
+                    <button
+                      className="text-gray-500 text-xs font-bold uppercase hover:text-white transition-colors py-2"
+                      onClick={() => {
+                        setEditingId(null);
+                        setNewGame({ name: "", link: "", image: "" });
+                      }}
+                    >
+                      Cancel Editing
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Live Game Management */}
-          <div className="lg:col-span-2 space-y-12">
-            <section>
-              <h2 className="text-2xl font-bold mb-6 italic uppercase tracking-tight">
-                Active Game Library
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {games?.map((game: Doc<"games">) => (
-                  <div
-                    key={game._id}
-                    className="bg-gray-800/30 p-3 rounded-2xl border border-white/5 hover:border-white/10 transition-colors"
-                  >
-                    <img
-                      src={game.image || "https://placehold.co/200x120"}
-                      className="w-full h-24 object-cover rounded-xl mb-3"
-                    />
-                    <p className="font-bold truncate text-sm px-1">
-                      {game.name}
-                    </p>
-                    <div className="flex gap-2 mt-3 px-1">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-7 text-[10px] font-bold"
-                        onClick={() => {
-                          setEditingId(game._id);
-                          setNewGame({
-                            name: game.name,
-                            link: game.link,
-                            image: game.image || "",
-                          });
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 text-[10px] font-bold"
-                        onClick={() => deleteGame({ id: game._id })}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-12">
-          <section className="bg-gray-800/30 p-6 rounded-3xl border border-white/5">
-            <h2 className="text-2xl font-bold mb-6 text-blue-400 italic uppercase">
-              Registered Platform Users
-            </h2>
-            <div className="space-y-5">
-              {/* Add New User Form */}
-              <div className="space-y-3">
-                <h3 className="text-xl font-bold text-orange-400 uppercase">
-                  Add New User
-                </h3>
-                <Input
-                  placeholder="User Email"
-                  value={newUser.email}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, email: e.target.value })
-                  }
-                  className="bg-gray-900 border-gray-700 text-white"
-                />
-                <select
-                  value={newUser.role}
-                  onChange={(e) =>
-                    setNewUser({ ...newUser, role: e.target.value })
-                  }
-                  className="bg-gray-900 border-gray-700 text-white px-4 py-2 rounded-lg"
+            {/* Game Grid */}
+            <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-6">
+              {games?.map((game: Doc<"games">) => (
+                <div
+                  key={game._id}
+                  className="bg-gray-800/30 p-3 rounded-2xl border border-white/5 hover:border-white/10 transition-all shadow-xl group"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
+                  <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-black">
+                    <img
+                      src={game.image || "https://placehold.co/400x225"}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                  </div>
+                  <p className="font-bold truncate text-xs px-1 text-gray-300 uppercase tracking-tighter">
+                    {game.name}
+                  </p>
+                  <div className="flex gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="flex-1 h-8 text-[10px] font-black uppercase rounded-lg"
+                      onClick={() => {
+                        setEditingId(game._id);
+                        setNewGame({
+                          name: game.name,
+                          link: game.link,
+                          image: game.image || "",
+                        });
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="flex-1 h-8 text-[10px] font-black uppercase rounded-lg"
+                      onClick={() => deleteGame({ id: game._id })}
+                    >
+                      Del
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            {/* User Form */}
+            <div className="bg-gray-800/50 p-6 rounded-3xl border border-white/5 h-fit sticky top-8 backdrop-blur-md shadow-2xl">
+              <h2 className="text-xl font-black mb-6 text-blue-400 uppercase">
+                Add User
+              </h2>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
+                    Email
+                  </label>
+                  <Input
+                    placeholder="user@example.com"
+                    value={newUser.email}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, email: e.target.value })
+                    }
+                    className="bg-gray-900 border-gray-700 h-12 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
+                    Role
+                  </label>
+                  <select
+                    value={newUser.role}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, role: e.target.value })
+                    }
+                    className="w-full bg-gray-900 border-gray-700 text-white px-4 py-3 rounded-xl text-sm font-bold uppercase outline-none focus:ring-1 ring-blue-500 appearance-none"
+                  >
+                    <option value="user">Standard User</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
                 <Button
                   onClick={() => {
                     if (newUser.email) {
-                      addUser(newUser);
+                      addUser({ email: newUser.email, role: newUser.role });
                       setNewUser({ email: "", role: "user" });
                     }
                   }}
-                  className="bg-green-600 hover:bg-green-700 font-bold uppercase"
+                  className="w-full bg-blue-600 hover:bg-blue-700 font-black py-7 text-lg shadow-xl uppercase mt-4 rounded-2xl"
                 >
-                  Add User
+                  Create Account
                 </Button>
               </div>
+            </div>
 
-              {/* User List */}
-              <div className="space-y-3 overflow-y-auto max-h-[400px] pr-2 scrollbar-hide">
+            {/* User List */}
+            <div className="lg:col-span-2 space-y-4">
+              <h2 className="text-2xl font-black uppercase tracking-tighter mb-6">
+                Registered Base
+              </h2>
+              <div className="grid grid-cols-1 gap-3">
                 {users?.map((u: Doc<"users">) => (
                   <div
                     key={u._id}
-                    className="flex justify-between items-center py-3 border-b border-gray-800 hover:bg-white/5 px-4 rounded-lg transition-colors"
+                    className="flex justify-between items-center py-4 px-6 bg-gray-800/30 border border-white/5 rounded-2xl hover:bg-white/5 transition-colors shadow-lg"
                   >
-                    <span className="text-sm font-medium">{u.email}</span>
-                    <div className="flex items-center gap-4">
+                    <div>
+                      <p className="font-bold text-gray-100 text-sm tracking-tight">
+                        {u.email}
+                      </p>
+                      <p className="text-[8px] text-gray-600 font-mono tracking-widest mt-1 uppercase">
+                        {u._id}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
                       <select
                         value={u.role}
                         onChange={(e) =>
                           updateUser({ id: u._id, role: e.target.value })
                         }
-                        className="bg-gray-900 border-gray-700 text-white px-3 py-1 rounded-lg"
+                        className="bg-gray-900 border-gray-700 text-[10px] font-black px-4 py-2 rounded-full outline-none focus:ring-1 ring-white/20 uppercase"
                       >
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
+                        <option value="user">USER</option>
+                        <option value="admin">ADMIN</option>
                       </select>
                       <Button
-                        size="sm"
                         variant="destructive"
-                        className="h-7 text-[10px] font-bold"
+                        size="sm"
+                        className="h-9 w-9 rounded-full p-0 flex items-center justify-center font-black shadow-lg"
                         onClick={() => deleteUser({ id: u._id })}
                       >
-                        Delete
+                        ×
                       </Button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          </section>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
