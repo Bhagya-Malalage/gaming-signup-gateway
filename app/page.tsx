@@ -32,9 +32,12 @@ export default function LandingPage() {
     userEmail === "baani@baazidaily.com" ||
     currentUser?.role === "admin";
 
-  // Split games for columns
-  const leftGames = games ? games.slice(0, Math.ceil(games.length / 2)) : [];
-  const rightGames = games ? games.slice(Math.ceil(games.length / 2)) : [];
+  // NEW LOGIC: Only take the first 12 games for the Landing Page
+  // We reverse() them so the "Latest" ones appear first
+  const displayGames = games ? [...games].reverse().slice(0, 12) : [];
+
+  const leftGames = displayGames.slice(0, Math.ceil(displayGames.length / 2));
+  const rightGames = displayGames.slice(Math.ceil(displayGames.length / 2));
 
   if (!isLoaded) return null;
 
@@ -52,6 +55,9 @@ export default function LandingPage() {
           <h1 className="text-xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 uppercase italic tracking-tighter leading-none">
             CLAIM ₹5000 BONUS
           </h1>
+          <span className="hidden md:inline text-[9px] text-orange-500 font-bold uppercase tracking-widest border-l border-gray-800 pl-3">
+            LATEST HITS
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -67,7 +73,7 @@ export default function LandingPage() {
             <Button
               onClick={() => router.push("/dashboard")}
               variant="outline"
-              className="h-7 text-[9px] font-bold border-gray-700 text-white"
+              className="h-7 text-[9px] font-bold border-gray-700 hover:bg-gray-800 text-white"
             >
               Hub
             </Button>
@@ -75,11 +81,10 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* MAIN "COMMAND CENTER" GRID - Updated to 6 columns to prevent overlap */}
+      {/* MAIN GRID - Showing only 12 Games */}
       <div className="relative z-10 flex-1 w-full max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-6 gap-3 p-4 overflow-hidden">
-        {/* LEFT GAMES (2 Columns wide) - z-index low */}
         <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start z-0">
-          {leftGames.slice(0, 6).map((game) => (
+          {leftGames.map((game) => (
             <GameCard
               key={game._id}
               game={game}
@@ -90,7 +95,6 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* CENTER AUTH FORM (2 Columns wide - Higher room and z-index) */}
         <div className="col-span-1 lg:col-span-2 flex flex-col items-center justify-center z-20">
           <div className="w-full max-w-[380px] bg-white/5 backdrop-blur-3xl border border-white/10 p-1 rounded-2xl shadow-2xl scale-90 xl:scale-95 transition-transform">
             <SignUp
@@ -107,19 +111,17 @@ export default function LandingPage() {
                   formFieldInput:
                     "bg-white/5 border-white/10 text-white h-9 text-xs",
                   footer: "hidden",
-                  socialButtonsBlockButton: "h-9",
                 },
               }}
             />
           </div>
-          <p className="text-[10px] text-gray-500 font-bold uppercase mt-3 tracking-widest opacity-50">
-            Join to play full library
+          <p className="text-[10px] text-orange-500 font-bold uppercase mt-3 tracking-widest animate-pulse">
+            Join to unlock full library
           </p>
         </div>
 
-        {/* RIGHT GAMES (2 Columns wide) - z-index low */}
         <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start z-0">
-          {rightGames.slice(0, 6).map((game) => (
+          {rightGames.map((game) => (
             <GameCard
               key={game._id}
               game={game}
@@ -131,14 +133,13 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* FOOTER STRIP */}
       <footer className="relative z-30 py-1 px-6 bg-black border-t border-white/5 text-center">
         <p className="text-[8px] text-gray-700 font-bold uppercase tracking-[0.4em]">
-          Licensed Gaming Portal © 2024
+          Official Gaming Hub © 2024
         </p>
       </footer>
 
-      {/* GAME MODAL (Above everything) */}
+      {/* GAME MODAL */}
       {selectedGame && (
         <div className="fixed inset-0 bg-black/98 flex items-center justify-center z-[100] p-4 backdrop-blur-xl">
           <div className="bg-gray-900 rounded-2xl shadow-2xl border border-white/10 p-3 max-w-5xl w-full relative">
@@ -151,7 +152,7 @@ export default function LandingPage() {
             <h2 className="text-lg font-black text-orange-400 uppercase italic mb-3 tracking-tight px-2">
               {selectedGame.name}
             </h2>
-            <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black ring-1 ring-white/10">
+            <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/10">
               <iframe
                 src={selectedGame.link}
                 title={selectedGame.name}

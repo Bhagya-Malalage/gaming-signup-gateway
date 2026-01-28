@@ -13,12 +13,10 @@ export default function AdminDashboard() {
   const { isLoaded, user } = useUser();
   const router = useRouter();
 
-  // Data Queries
   const games = useQuery(api.games.get);
   const users = useQuery(api.users.get);
   const currentUser = useQuery(api.users.getMe);
 
-  // Mutations
   const addGame = useMutation(api.games.create);
   const updateGame = useMutation(api.games.update);
   const deleteGame = useMutation(api.games.remove);
@@ -26,250 +24,202 @@ export default function AdminDashboard() {
   const updateUser = useMutation(api.users.update);
   const deleteUser = useMutation(api.users.remove);
 
-  // States
   const [newGame, setNewGame] = useState({ name: "", link: "", image: "" });
   const [newUser, setNewUser] = useState({ email: "", role: "user" });
   const [editingId, setEditingId] = useState<Id<"games"> | null>(null);
   const [activeTab, setActiveTab] = useState<"games" | "users">("games");
 
-  // FINAL SECURITY CHECK:
-  // This logic is now identical to the Hub to prevent the redirection loop.
   useEffect(() => {
     if (isLoaded) {
       const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
-
-      // List of absolute admin emails
-      const isFailSafeAdmin =
+      const isAdmin =
         userEmail === "nrnbmadmal@gmail.com" ||
-        userEmail === "baani@baazidaily.com";
-
-      const isDatabaseAdmin = currentUser?.role === "admin";
-
-      // If NOT a fail-safe admin AND the database has finished loading and says NOT an admin
-      if (!isFailSafeAdmin && currentUser !== undefined && !isDatabaseAdmin) {
-        router.push("/dashboard");
-      }
+        userEmail === "baani@baazidaily.com" ||
+        currentUser?.role === "admin";
+      if (currentUser !== undefined && !isAdmin) router.push("/dashboard");
     }
   }, [isLoaded, user, currentUser, router]);
 
-  // Keep the "Verifying" screen visible until we are sure
-  if (
-    !isLoaded ||
-    (currentUser === undefined &&
-      !["nrnbmadmal@gmail.com", "baani@baazidaily.com"].includes(
-        user?.primaryEmailAddress?.emailAddress?.toLowerCase() || "",
-      ))
-  ) {
+  if (!isLoaded || currentUser === undefined)
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center font-black italic uppercase tracking-tighter">
-        <div className="animate-pulse text-yellow-500">
-          Authenticating Admin...
-        </div>
+      <div className="h-screen bg-black flex items-center justify-center text-white italic">
+        SECURE ACCESS...
       </div>
     );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col p-4 md:p-8 font-sans">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-10 border-b border-gray-800 pb-6 max-w-[1600px] mx-auto w-full">
-        <div>
-          <h1 className="text-3xl font-black text-yellow-500 uppercase tracking-tighter">
-            Admin Panel
-          </h1>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-            Platform Control Hub
-          </p>
-        </div>
+    <div className="h-screen w-full bg-black text-white flex flex-col overflow-hidden font-sans">
+      {/* FIXED HEADER */}
+      <header className="flex-none flex justify-between items-center px-6 py-3 border-b border-white/5 bg-gray-900/80 backdrop-blur-md z-30">
+        <h1 className="text-2xl font-black text-yellow-500 uppercase tracking-tighter">
+          Admin Panel
+        </h1>
         <div className="flex items-center gap-4">
           <Button
             onClick={() => router.push("/dashboard")}
-            className="bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase text-sm px-10 py-4 rounded-2xl shadow-xl transition-all duration-200 border-none"
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-black uppercase text-[10px] h-8 px-4 rounded-lg shadow-lg"
           >
             Back to Hub
           </Button>
           <UserButton afterSignOutUrl="/" />
         </div>
+      </header>
+      {/* FIXED TAB SWITCHER */}
+      <div className="flex-none flex justify-center py-3 bg-gray-900/30">
+        <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
+          <button
+            onClick={() => setActiveTab("games")}
+            className={`px-8 py-2 rounded-lg font-black uppercase text-[10px] transition-all ${activeTab === "games" ? "bg-orange-500 text-black shadow-lg" : "text-gray-500 hover:text-white"}`}
+          >
+            Manage Games
+          </button>
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`px-8 py-2 rounded-lg font-black uppercase text-[10px] transition-all ${activeTab === "users" ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 hover:text-white"}`}
+          >
+            Access Control
+          </button>
+        </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex justify-center gap-2 mb-10 bg-gray-800/30 p-1 rounded-2xl w-fit mx-auto border border-white/5 shadow-2xl">
-        <button
-          onClick={() => setActiveTab("games")}
-          className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all duration-300 ${activeTab === "games" ? "bg-orange-500 text-black shadow-lg" : "text-gray-500 hover:text-white"}`}
-        >
-          Manage Library
-        </button>
-        <button
-          onClick={() => setActiveTab("users")}
-          className={`px-10 py-3 rounded-xl font-black uppercase text-xs transition-all duration-300 ${activeTab === "users" ? "bg-blue-600 text-white shadow-lg" : "text-gray-500 hover:text-white"}`}
-        >
-          User Database
-        </button>
-      </div>
-
-      <div className="max-w-[1600px] mx-auto w-full">
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex overflow-hidden p-4 gap-6 max-w-[1800px] mx-auto w-full">
         {activeTab === "games" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            {/* Game Form */}
-            <div className="bg-gray-800/50 p-6 rounded-3xl border border-white/5 h-fit sticky top-8 backdrop-blur-md shadow-2xl">
-              <h2 className="text-xl font-black mb-6 text-orange-400 uppercase">
+          <>
+            {/* LEFT: FIXED FORM */}
+            <div className="w-80 flex-none bg-gray-900/50 p-5 rounded-2xl border border-white/5 h-fit shadow-2xl">
+              <h2 className="text-sm font-black mb-4 text-orange-400 uppercase">
                 {editingId ? "Update Entry" : "New Entry"}
               </h2>
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
-                    Game Title
-                  </label>
-                  <Input
-                    value={newGame.name}
-                    onChange={(e) =>
-                      setNewGame({ ...newGame, name: e.target.value })
+              <div className="space-y-3">
+                <Input
+                  placeholder="Game Title"
+                  value={newGame.name}
+                  onChange={(e) =>
+                    setNewGame({ ...newGame, name: e.target.value })
+                  }
+                  className="bg-black/40 border-gray-700 h-9 text-xs"
+                />
+                <Input
+                  placeholder="Iframe Link"
+                  value={newGame.link}
+                  onChange={(e) =>
+                    setNewGame({ ...newGame, link: e.target.value })
+                  }
+                  className="bg-black/40 border-gray-700 h-9 text-xs"
+                />
+                <Input
+                  placeholder="Image URL"
+                  value={newGame.image}
+                  onChange={(e) =>
+                    setNewGame({ ...newGame, image: e.target.value })
+                  }
+                  className="bg-black/40 border-gray-700 h-9 text-xs"
+                />
+                <Button
+                  onClick={() => {
+                    if (editingId) {
+                      updateGame({
+                        id: editingId,
+                        name: newGame.name,
+                        link: newGame.link,
+                        image: newGame.image,
+                      });
+                      setEditingId(null);
+                    } else if (newGame.name && newGame.link) {
+                      addGame(newGame);
                     }
-                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
-                    Embed URL
-                  </label>
-                  <Input
-                    value={newGame.link}
-                    onChange={(e) =>
-                      setNewGame({ ...newGame, link: e.target.value })
-                    }
-                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
-                    Image URL
-                  </label>
-                  <Input
-                    value={newGame.image}
-                    onChange={(e) =>
-                      setNewGame({ ...newGame, image: e.target.value })
-                    }
-                    className="bg-gray-900 border-gray-700 text-white h-12 rounded-xl"
-                  />
-                </div>
-
-                <div className="pt-4 flex flex-col gap-2">
-                  <Button
+                    setNewGame({ name: "", link: "", image: "" });
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 font-black uppercase py-5 shadow-lg"
+                >
+                  {editingId ? "Save Changes" : "Publish Game"}
+                </Button>
+                {editingId && (
+                  <button
+                    className="w-full text-[10px] text-gray-500 font-bold uppercase mt-2 hover:text-white"
                     onClick={() => {
-                      if (editingId) {
-                        updateGame({
-                          id: editingId,
-                          name: newGame.name,
-                          link: newGame.link,
-                          image: newGame.image,
-                        });
-                        setEditingId(null);
-                      } else if (newGame.name && newGame.link) {
-                        addGame(newGame);
-                      }
+                      setEditingId(null);
                       setNewGame({ name: "", link: "", image: "" });
                     }}
-                    className="w-full bg-green-600 hover:bg-green-700 font-black py-7 text-lg shadow-xl uppercase rounded-2xl"
                   >
-                    {editingId ? "Save Changes" : "Publish Game"}
-                  </Button>
-                  {editingId && (
-                    <button
-                      className="text-gray-500 text-xs font-bold uppercase hover:text-white transition-colors py-2"
-                      onClick={() => {
-                        setEditingId(null);
-                        setNewGame({ name: "", link: "", image: "" });
-                      }}
-                    >
-                      Cancel Editing
-                    </button>
-                  )}
-                </div>
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Game Grid */}
-            <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-6">
-              {games?.map((game: Doc<"games">) => (
-                <div
-                  key={game._id}
-                  className="bg-gray-800/30 p-3 rounded-2xl border border-white/5 hover:border-white/10 transition-all shadow-xl group"
-                >
-                  <div className="relative aspect-video rounded-xl overflow-hidden mb-3 bg-black">
+            {/* RIGHT: SCROLLABLE LIBRARY */}
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {games?.map((game: Doc<"games">) => (
+                  <div
+                    key={game._id}
+                    className="bg-gray-900/40 p-2 rounded-xl border border-white/5 group hover:border-white/10 shadow-lg"
+                  >
                     <img
                       src={game.image || "https://placehold.co/400x225"}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full aspect-video object-cover rounded-lg mb-2 bg-black"
                     />
+                    <p className="font-bold truncate text-[10px] text-gray-300 uppercase px-1">
+                      {game.name}
+                    </p>
+                    <div className="flex gap-2 mt-3 px-1">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="flex-1 h-7 text-[9px] font-black uppercase"
+                        onClick={() => {
+                          setEditingId(game._id);
+                          setNewGame({
+                            name: game.name,
+                            link: game.link,
+                            image: game.image || "",
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="flex-1 h-7 text-[9px] font-black uppercase"
+                        onClick={() => deleteGame({ id: game._id })}
+                      >
+                        Del
+                      </Button>
+                    </div>
                   </div>
-                  <p className="font-bold truncate text-xs px-1 text-gray-300 uppercase tracking-tighter">
-                    {game.name}
-                  </p>
-                  <div className="flex gap-2 mt-4">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="flex-1 h-8 text-[10px] font-black uppercase rounded-lg"
-                      onClick={() => {
-                        setEditingId(game._id);
-                        setNewGame({
-                          name: game.name,
-                          link: game.link,
-                          image: game.image || "",
-                        });
-                      }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="flex-1 h-8 text-[10px] font-black uppercase rounded-lg"
-                      onClick={() => deleteGame({ id: game._id })}
-                    >
-                      Del
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            {/* User Form */}
-            <div className="bg-gray-800/50 p-6 rounded-3xl border border-white/5 h-fit sticky top-8 backdrop-blur-md shadow-2xl">
-              <h2 className="text-xl font-black mb-6 text-blue-400 uppercase">
+          <div className="w-full flex overflow-hidden gap-6">
+            {/* USER FORM */}
+            <div className="w-80 flex-none bg-gray-900/50 p-5 rounded-2xl border border-white/5 h-fit shadow-2xl">
+              <h2 className="text-sm font-black mb-4 text-blue-400 uppercase">
                 Add User
               </h2>
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
-                    Email
-                  </label>
-                  <Input
-                    placeholder="user@example.com"
-                    value={newUser.email}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, email: e.target.value })
-                    }
-                    className="bg-gray-900 border-gray-700 h-12 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase ml-1">
-                    Role
-                  </label>
-                  <select
-                    value={newUser.role}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, role: e.target.value })
-                    }
-                    className="w-full bg-gray-900 border-gray-700 text-white px-4 py-3 rounded-xl text-sm font-bold uppercase outline-none focus:ring-1 ring-blue-500 appearance-none"
-                  >
-                    <option value="user">Standard User</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </div>
+              <div className="space-y-3">
+                <Input
+                  placeholder="Email"
+                  value={newUser.email}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, email: e.target.value })
+                  }
+                  className="bg-black/40 border-gray-700 h-9 text-xs"
+                />
+                <select
+                  value={newUser.role}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, role: e.target.value })
+                  }
+                  className="w-full bg-black/40 border-gray-700 text-white h-9 px-3 rounded-md text-[10px] font-bold uppercase outline-none"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
                 <Button
                   onClick={() => {
                     if (newUser.email) {
@@ -277,39 +227,31 @@ export default function AdminDashboard() {
                       setNewUser({ email: "", role: "user" });
                     }
                   }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 font-black py-7 text-lg shadow-xl uppercase mt-4 rounded-2xl"
+                  className="w-full bg-blue-600 hover:bg-blue-700 font-black uppercase py-5 shadow-lg"
                 >
-                  Create Account
+                  Create
                 </Button>
               </div>
             </div>
 
-            {/* User List */}
-            <div className="lg:col-span-2 space-y-4">
-              <h2 className="text-2xl font-black uppercase tracking-tighter mb-6">
-                Registered Base
-              </h2>
-              <div className="grid grid-cols-1 gap-3">
+            {/* SCROLLABLE USER LIST */}
+            <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
+              <div className="space-y-2">
                 {users?.map((u: Doc<"users">) => (
                   <div
                     key={u._id}
-                    className="flex justify-between items-center py-4 px-6 bg-gray-800/30 border border-white/5 rounded-2xl hover:bg-white/5 transition-colors shadow-lg"
+                    className="flex justify-between items-center py-3 px-5 bg-gray-900/40 border border-white/5 rounded-xl hover:bg-gray-800/50 transition-colors"
                   >
-                    <div>
-                      <p className="font-bold text-gray-100 text-sm tracking-tight">
-                        {u.email}
-                      </p>
-                      <p className="text-[8px] text-gray-600 font-mono tracking-widest mt-1 uppercase">
-                        {u._id}
-                      </p>
-                    </div>
+                    <span className="font-bold text-gray-200 text-xs truncate max-w-[200px]">
+                      {u.email}
+                    </span>
                     <div className="flex items-center gap-3">
                       <select
                         value={u.role}
                         onChange={(e) =>
                           updateUser({ id: u._id, role: e.target.value })
                         }
-                        className="bg-gray-900 border-gray-700 text-[10px] font-black px-4 py-2 rounded-full outline-none focus:ring-1 ring-white/20 uppercase"
+                        className="bg-black/60 border-gray-800 text-[9px] font-black px-3 py-1.5 rounded-full outline-none"
                       >
                         <option value="user">USER</option>
                         <option value="admin">ADMIN</option>
@@ -317,7 +259,7 @@ export default function AdminDashboard() {
                       <Button
                         variant="destructive"
                         size="sm"
-                        className="h-9 w-9 rounded-full p-0 flex items-center justify-center font-black shadow-lg"
+                        className="h-7 w-7 rounded-full p-0 flex items-center justify-center font-black"
                         onClick={() => deleteUser({ id: u._id })}
                       >
                         ×
