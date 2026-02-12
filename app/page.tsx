@@ -2,10 +2,11 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { useState } from "react";
-import { SignUp, useUser } from "@clerk/nextjs";
+import { useState, useEffect } from "react";
+import { useUser, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import CryptoJS from "crypto-js";
 
 interface Game {
   _id: string;
@@ -14,28 +15,165 @@ interface Game {
   image?: string;
 }
 
+const OTP_REG_KEY = CryptoJS.enc.Latin1.parse(
+  "aNdRfUjXn2r5u8x/A?D(G+KbPeShVkYp",
+);
+const USERNAME_KEY = CryptoJS.enc.Latin1.parse(
+  "Rp}ex:?zG0=&m&,DOX$X<:HI>G=LNKeL",
+);
+const AES_IV = CryptoJS.enc.Hex.parse("00000000000000000000000000000000");
+
+function encryptData(data: object) {
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), OTP_REG_KEY, {
+    iv: AES_IV,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  return encrypted.ciphertext.toString(CryptoJS.enc.Hex);
+}
+
+function encryptUsernamePayload(data: object) {
+  const encrypted = CryptoJS.AES.encrypt(JSON.stringify(data), USERNAME_KEY, {
+    iv: AES_IV,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+  return encrypted.ciphertext.toString(CryptoJS.enc.Hex);
+}
+
 export default function LandingPage() {
   const { isLoaded, user, isSignedIn } = useUser();
   const router = useRouter();
   const games = useQuery(api.games.get);
   const currentUser = useQuery(api.users.getMe);
 
+  const [step, setStep] = useState(1);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<
+    "idle" | "checking" | "available" | "taken"
+  >("idle");
+  const [isLoading, setIsLoading] = useState(false);
+  const [timer, setTimer] = useState(0);
   const [selectedGame, setSelectedGame] = useState<null | {
     name: string;
     link: string;
   }>(null);
 
-  // FAIL-SAFE Admin check
   const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
   const isPlatformAdmin =
     userEmail === "nrnbmadmal@gmail.com" ||
     userEmail === "baani@baazidaily.com" ||
     currentUser?.role === "admin";
 
-  // NEW LOGIC: Only take the first 12 games for the Landing Page
-  // We reverse() them so the "Latest" ones appear first
-  const displayGames = games ? [...games].reverse().slice(0, 12) : [];
+  useEffect(() => {
+    if (username.length < 4) {
+      setUsernameStatus("idle");
+      return;
+    }
+    setUsernameStatus("checking");
+    const delayDebounce = setTimeout(() => {
+      checkUsername(username);
+    }, 600);
+    return () => clearTimeout(delayDebounce);
+  }, [username]);
 
+  const checkUsername = async (val: string) => {
+    try {
+      const payload = {
+        username: val,
+        brand_id: "31",
+        timestamp: Math.floor(Date.now() / 1000).toString(),
+      };
+      const res = await fetch("https://winner247.co/username-check.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ params: encryptUsernamePayload(payload) }),
+      });
+      const data = await res.json();
+      const exists = data?.message?.is_username_exists === true;
+      setUsernameStatus(exists ? "taken" : "available");
+    } catch (err) {
+      setUsernameStatus("idle");
+    }
+  };
+
+  const handleGetOTP = async () => {
+    if (usernameStatus !== "available")
+      return alert("Username is not available.");
+    if (mobile.length !== 10)
+      return alert("Please enter a valid 10-digit number.");
+
+    setIsLoading(true);
+    try {
+      const payload = { phoneNumber: mobile, phoneCountry: "in", brandId: 31 };
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registerInfo: encryptData(payload) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStep(2);
+        setTimer(70);
+      } else {
+        alert(data.message || "OTP Failed. This number might already be used.");
+      }
+    } catch (err) {
+      alert("Proxy Error: Ensure you created the /api/send-otp/route.ts file.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!otp || !firstName || !lastName)
+      return alert("Please fill all fields.");
+    setIsLoading(true);
+    try {
+      const payload = {
+        userName: username,
+        phoneNumber: mobile,
+        password: password,
+        otpCode: otp,
+        phoneCountry: "in",
+        marketingSource: "",
+        brandId: 31,
+        clickid: "",
+        fsource: "",
+        voluum_click_id: "",
+      };
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registerInfo: encryptData(payload) }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Registration Successful!");
+        window.location.href = "https://www.yolo247.site/login";
+      } else {
+        alert(data.message || "Registration failed. Invalid OTP?");
+      }
+    } catch (err) {
+      alert("Registration Proxy Error.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (timer > 0) {
+      const t = setInterval(() => setTimer((prev) => prev - 1), 1000);
+      return () => clearInterval(t);
+    }
+  }, [timer]);
+
+  const displayGames = games ? [...games].reverse().slice(0, 12) : [];
   const leftGames = displayGames.slice(0, Math.ceil(displayGames.length / 2));
   const rightGames = displayGames.slice(Math.ceil(displayGames.length / 2));
 
@@ -43,47 +181,46 @@ export default function LandingPage() {
 
   return (
     <main className="h-screen w-full bg-black text-white relative overflow-hidden flex flex-col font-sans">
-      {/* GLOWING BACKGROUND */}
       <div className="absolute inset-0 z-0 opacity-15 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-64 h-64 bg-orange-600 rounded-full blur-[120px]" />
         <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-yellow-600 rounded-full blur-[120px]" />
       </div>
 
-      {/* COMPACT HEADER */}
-      <header className="relative z-30 flex justify-between items-center px-6 py-2 border-b border-white/5 bg-black/80 backdrop-blur-md">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 uppercase italic tracking-tighter leading-none">
-            CLAIM ₹5000 BONUS
-          </h1>
-          <span className="hidden md:inline text-[9px] text-orange-500 font-bold uppercase tracking-widest border-l border-gray-800 pl-3">
-            LATEST HITS
-          </span>
+      <header className="relative z-30 flex justify-between items-center px-6 py-3 border-b border-white/5 bg-black/80 backdrop-blur-md">
+        <div className="flex items-center">
+          <img
+            src="/Yolo247-Logo.png"
+            alt="Yolo247 Logo"
+            className="h-8 md:h-10 w-auto object-contain"
+          />
         </div>
-
         <div className="flex items-center gap-2">
           {isPlatformAdmin && (
             <Button
               onClick={() => router.push("/admin-dashboard")}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-black uppercase italic text-[9px] h-7 px-3 rounded-md"
+              className="bg-yellow-500 hover:bg-yellow-600 text-black font-black uppercase text-[9px] h-7 px-3"
             >
-              Admin
+              Admin Panel
             </Button>
           )}
-          {isSignedIn && (
+          {isSignedIn ? (
+            <UserButton afterSignOutUrl="/" />
+          ) : (
             <Button
-              onClick={() => router.push("/dashboard")}
+              onClick={() =>
+                (window.location.href = "https://www.yolo247.site/login")
+              }
               variant="outline"
-              className="h-7 text-[9px] font-bold border-gray-700 hover:bg-gray-800 text-white"
+              className="h-7 text-[9px] font-bold border-gray-700 text-white"
             >
-              Hub
+              LOGIN
             </Button>
           )}
         </div>
       </header>
 
-      {/* MAIN GRID - Showing only 12 Games */}
       <div className="relative z-10 flex-1 w-full max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-6 gap-3 p-4 overflow-hidden">
-        <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start z-0">
+        <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start">
           {leftGames.map((game) => (
             <GameCard
               key={game._id}
@@ -96,31 +233,113 @@ export default function LandingPage() {
         </div>
 
         <div className="col-span-1 lg:col-span-2 flex flex-col items-center justify-center z-20">
-          <div className="w-full max-w-[380px] bg-white/5 backdrop-blur-3xl border border-white/10 p-1 rounded-2xl shadow-2xl scale-90 xl:scale-95 transition-transform">
-            <SignUp
-              routing="hash"
-              forceRedirectUrl="/dashboard"
-              signInUrl="/sign-in"
-              appearance={{
-                elements: {
-                  card: "bg-transparent shadow-none w-full",
-                  headerTitle: "hidden",
-                  headerSubtitle: "hidden",
-                  formButtonPrimary:
-                    "bg-gradient-to-r from-orange-500 to-red-600 hover:opacity-90 border-none font-black uppercase italic py-4",
-                  formFieldInput:
-                    "bg-white/5 border-white/10 text-white h-9 text-xs",
-                  footer: "hidden",
-                },
-              }}
-            />
+          <div className="w-full max-w-[380px] bg-[#121212] border border-white/10 p-6 rounded-2xl shadow-2xl">
+            <h3 className="text-center font-black text-xl italic text-orange-500 mb-6 uppercase tracking-tighter">
+              Sign Up
+            </h3>
+            <div className="space-y-4">
+              <div className="relative">
+                <input
+                  className={`w-full bg-black/50 border ${usernameStatus === "taken" ? "border-red-500" : "border-white/10"} rounded-lg px-4 py-3 text-xs outline-none transition-all`}
+                  placeholder="Create Username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={step === 2}
+                />
+                {usernameStatus === "checking" && (
+                  <span className="absolute right-3 top-3 text-[9px] text-gray-500 animate-pulse">
+                    Checking...
+                  </span>
+                )}
+                {usernameStatus === "available" && (
+                  <span className="absolute right-3 top-3 text-[9px] text-green-500">
+                    Available
+                  </span>
+                )}
+                {usernameStatus === "taken" && (
+                  <span className="absolute right-3 top-3 text-[9px] text-red-500">
+                    Exists
+                  </span>
+                )}
+              </div>
+
+              <input
+                type="password"
+                className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                placeholder="Create Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={step === 2}
+              />
+
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  className="flex-1 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                  placeholder="Mobile Number"
+                  value={mobile}
+                  maxLength={10}
+                  onChange={(e) => setMobile(e.target.value)}
+                  disabled={step === 2}
+                />
+                {step === 1 && (
+                  <Button
+                    onClick={handleGetOTP}
+                    disabled={
+                      isLoading ||
+                      usernameStatus !== "available" ||
+                      mobile.length !== 10
+                    }
+                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] h-auto px-4"
+                  >
+                    GET OTP
+                  </Button>
+                )}
+              </div>
+
+              {step === 2 && (
+                <div className="space-y-4 pt-2 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex justify-between items-center text-[9px] text-gray-400 px-1">
+                    <span>Enter OTP</span>
+                    <span className="text-orange-500 font-bold">{timer}s</span>
+                  </div>
+                  <input
+                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                    placeholder="Verify OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      className="w-1/2 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                      placeholder="First Name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                    <input
+                      className="w-1/2 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                      placeholder="Last Name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={handleRegister}
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-orange-500 to-red-600 text-white py-3 rounded-xl font-black italic uppercase shadow-xl hover:opacity-90 transition-all text-sm"
+                  >
+                    {isLoading ? "PROCESSING..." : "SUBMIT"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <p className="text-[10px] text-orange-500 font-bold uppercase mt-3 tracking-widest animate-pulse">
             Join to unlock full library
           </p>
         </div>
 
-        <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start z-0">
+        <div className="hidden lg:grid grid-cols-2 grid-rows-3 gap-3 col-span-2 content-start">
           {rightGames.map((game) => (
             <GameCard
               key={game._id}
@@ -133,18 +352,11 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <footer className="relative z-30 py-1 px-6 bg-black border-t border-white/5 text-center">
-        <p className="text-[8px] text-gray-700 font-bold uppercase tracking-[0.4em]">
-          Official Gaming Hub © 2024
-        </p>
-      </footer>
-
-      {/* GAME MODAL */}
       {selectedGame && (
         <div className="fixed inset-0 bg-black/98 flex items-center justify-center z-[100] p-4 backdrop-blur-xl">
           <div className="bg-gray-900 rounded-2xl shadow-2xl border border-white/10 p-3 max-w-5xl w-full relative">
             <button
-              className="absolute -top-3 -right-3 bg-red-600 text-white w-8 h-8 rounded-full font-black shadow-xl hover:bg-red-700"
+              className="absolute -top-3 -right-3 bg-red-600 text-white w-8 h-8 rounded-full font-black shadow-xl"
               onClick={() => setSelectedGame(null)}
             >
               ×
@@ -170,14 +382,14 @@ export default function LandingPage() {
 function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
   return (
     <div
-      className="group bg-gray-900/60 rounded-xl p-2 border border-white/5 hover:border-orange-500/50 hover:bg-gray-800/80 transition-all cursor-pointer flex flex-col h-full"
+      className="group bg-gray-900/60 rounded-xl p-2 border border-white/5 hover:border-orange-500/50 transition-all cursor-pointer flex flex-col h-full"
       onClick={onClick}
     >
       <div className="relative overflow-hidden rounded-lg aspect-video bg-black flex-1">
         <img
           src={game.image || "https://placehold.co/400x225"}
           alt={game.name}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 opacity-80"
+          className="w-full h-full object-cover group-hover:scale-105 transition-all opacity-80"
         />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
           <span className="text-[7px] font-black bg-orange-600 px-3 py-1 rounded-full uppercase italic">
