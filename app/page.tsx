@@ -42,13 +42,13 @@ function encryptUsernamePayload(data: object) {
   return encrypted.ciphertext.toString(CryptoJS.enc.Hex);
 }
 
+// THIS IS THE DEFAULT EXPORT NEXT.JS IS LOOKING FOR
 export default function LandingPage() {
   const { isLoaded, user, isSignedIn } = useUser();
   const router = useRouter();
   const games = useQuery(api.games.get);
   const currentUser = useQuery(api.users.getMe);
 
-  // Form States
   const [step, setStep] = useState(1);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -56,6 +56,7 @@ export default function LandingPage() {
   const [otp, setOtp] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+
   const [usernameStatus, setUsernameStatus] = useState<
     "idle" | "checking" | "available" | "taken"
   >("idle");
@@ -72,7 +73,6 @@ export default function LandingPage() {
     userEmail === "baani@baazidaily.com" ||
     currentUser?.role === "admin";
 
-  // --- USERNAME CHECK ---
   useEffect(() => {
     if (username.length < 4) {
       setUsernameStatus("idle");
@@ -105,7 +105,6 @@ export default function LandingPage() {
     }
   };
 
-  // --- GET OTP (Reusable for Resend) ---
   const handleGetOTP = async () => {
     if (usernameStatus !== "available" && step === 1)
       return alert("Username is not available.");
@@ -123,21 +122,9 @@ export default function LandingPage() {
 
       if (data.success) {
         setStep(2);
-        setTimer(70); // Reset timer to 70 seconds
+        setTimer(70);
       } else {
-        // DETECT ALREADY REGISTERED ERROR
-        const msg = (data.message || "").toLowerCase();
-        if (
-          msg.includes("exists") ||
-          msg.includes("already") ||
-          msg.includes("registered")
-        ) {
-          alert(
-            "This phone number is already registered on Yolo247. Please log in or use a different number.",
-          );
-        } else {
-          alert(data.message || "OTP Request Failed.");
-        }
+        alert(data.error || data.message || "OTP Request Failed.");
       }
     } catch (err) {
       alert("Network error. Try again.");
@@ -146,7 +133,6 @@ export default function LandingPage() {
     }
   };
 
-  // --- FINAL REGISTER ---
   const handleRegister = async () => {
     if (!otp || !firstName || !lastName)
       return alert("Please fill all fields.");
@@ -174,7 +160,7 @@ export default function LandingPage() {
         alert("Registration Successful!");
         window.location.href = "https://www.yolo247.site/login";
       } else {
-        alert(data.message || "Registration failed. Invalid OTP?");
+        alert(data.error || data.message || "Registration failed.");
       }
     } catch (err) {
       alert("Registration failed. Please check your connection.");
@@ -183,7 +169,6 @@ export default function LandingPage() {
     }
   };
 
-  // Timer Logic
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (timer > 0) {
@@ -219,7 +204,7 @@ export default function LandingPage() {
           {isPlatformAdmin && (
             <Button
               onClick={() => router.push("/admin-dashboard")}
-              className="bg-yellow-500 hover:bg-yellow-600 text-black font-black uppercase text-[9px] h-7 px-3"
+              className="bg-yellow-500 hover:bg-yellow-600 text-black font-black uppercase text-[9px] h-7 px-3 rounded-lg"
             >
               Admin Panel
             </Button>
@@ -334,7 +319,7 @@ export default function LandingPage() {
                         <Button
                           onClick={handleGetOTP}
                           variant="outline"
-                          className="h-7 text-[9px] border-orange-500 text-orange-500 hover:bg-orange-500/10"
+                          className="h-7 text-[9px] border-orange-500 text-orange-500 hover:bg-orange-500/10 px-4"
                         >
                           RESEND OTP
                         </Button>
@@ -418,6 +403,7 @@ export default function LandingPage() {
   );
 }
 
+// HELPER COMPONENT (Not default exported)
 function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
   return (
     <div
@@ -430,8 +416,13 @@ function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
           alt={game.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-all opacity-80"
         />
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="text-[7px] font-black bg-orange-600 px-3 py-1 rounded-full uppercase italic">
+            Play
+          </span>
+        </div>
       </div>
-      <h3 className="text-center mt-2 font-black text-gray-400 group-hover:text-orange-400 text-[8px] uppercase truncate px-1">
+      <h3 className="text-center mt-2 font-black text-gray-400 group-hover:text-orange-400 transition-colors text-[8px] uppercase tracking-tighter truncate px-1">
         {game.name}
       </h3>
     </div>

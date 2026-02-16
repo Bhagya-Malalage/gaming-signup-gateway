@@ -17,11 +17,11 @@ export async function POST(request: Request) {
     );
 
     const data = await response.json();
-    // Return exactly what the backend says
-    return NextResponse.json(data);
+    // Forward the status code and data exactly as received
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
     return NextResponse.json(
-      { success: false, message: "Network Proxy Error" },
+      { success: false, error: "Network Proxy Error" },
       { status: 500 },
     );
   }

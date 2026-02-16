@@ -17,10 +17,10 @@ export async function POST(request: Request) {
     );
 
     const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(data, { status: response.status });
   } catch (error) {
     return NextResponse.json(
-      { success: false, message: "Server Proxy Error" },
+      { success: false, error: "Server Proxy Error" },
       { status: 500 },
     );
   }
