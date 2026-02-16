@@ -15,11 +15,13 @@ export async function POST(request: Request) {
         body: JSON.stringify(body),
       },
     );
+
     const data = await response.json();
+    // Return exactly what the backend says
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(
-      { success: false, message: "Server Proxy Error" },
+      { success: false, message: "Network Proxy Error" },
       { status: 500 },
     );
   }

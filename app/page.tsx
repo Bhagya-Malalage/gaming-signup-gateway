@@ -15,6 +15,7 @@ interface Game {
   image?: string;
 }
 
+// --- ENCRYPTION UTILS ---
 const OTP_REG_KEY = CryptoJS.enc.Latin1.parse(
   "aNdRfUjXn2r5u8x/A?D(G+KbPeShVkYp",
 );
@@ -47,6 +48,7 @@ export default function LandingPage() {
   const games = useQuery(api.games.get);
   const currentUser = useQuery(api.users.getMe);
 
+  // Form States
   const [step, setStep] = useState(1);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -70,6 +72,7 @@ export default function LandingPage() {
     userEmail === "baani@baazidaily.com" ||
     currentUser?.role === "admin";
 
+  // --- USERNAME CHECK ---
   useEffect(() => {
     if (username.length < 4) {
       setUsernameStatus("idle");
@@ -102,11 +105,11 @@ export default function LandingPage() {
     }
   };
 
+  // --- GET OTP (Reusable for Resend) ---
   const handleGetOTP = async () => {
-    if (usernameStatus !== "available")
+    if (usernameStatus !== "available" && step === 1)
       return alert("Username is not available.");
-    if (mobile.length !== 10)
-      return alert("Please enter a valid 10-digit number.");
+    if (mobile.length !== 10) return alert("Enter valid 10-digit number.");
 
     setIsLoading(true);
     try {
@@ -117,19 +120,33 @@ export default function LandingPage() {
         body: JSON.stringify({ registerInfo: encryptData(payload) }),
       });
       const data = await res.json();
+
       if (data.success) {
         setStep(2);
-        setTimer(70);
+        setTimer(70); // Reset timer to 70 seconds
       } else {
-        alert(data.message || "OTP Failed. This number might already be used.");
+        // DETECT ALREADY REGISTERED ERROR
+        const msg = (data.message || "").toLowerCase();
+        if (
+          msg.includes("exists") ||
+          msg.includes("already") ||
+          msg.includes("registered")
+        ) {
+          alert(
+            "This phone number is already registered on Yolo247. Please log in or use a different number.",
+          );
+        } else {
+          alert(data.message || "OTP Request Failed.");
+        }
       }
     } catch (err) {
-      alert("Proxy Error: Ensure you created the /api/send-otp/route.ts file.");
+      alert("Network error. Try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // --- FINAL REGISTER ---
   const handleRegister = async () => {
     if (!otp || !firstName || !lastName)
       return alert("Please fill all fields.");
@@ -139,7 +156,7 @@ export default function LandingPage() {
         userName: username,
         phoneNumber: mobile,
         password: password,
-        otpCode: otp,
+        otpCode: otp.trim(),
         phoneCountry: "in",
         marketingSource: "",
         brandId: 31,
@@ -160,17 +177,21 @@ export default function LandingPage() {
         alert(data.message || "Registration failed. Invalid OTP?");
       }
     } catch (err) {
-      alert("Registration Proxy Error.");
+      alert("Registration failed. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Timer Logic
   useEffect(() => {
+    let interval: NodeJS.Timeout;
     if (timer > 0) {
-      const t = setInterval(() => setTimer((prev) => prev - 1), 1000);
-      return () => clearInterval(t);
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
     }
+    return () => clearInterval(interval);
   }, [timer]);
 
   const displayGames = games ? [...games].reverse().slice(0, 12) : [];
@@ -237,72 +258,90 @@ export default function LandingPage() {
             <h3 className="text-center font-black text-xl italic text-orange-500 mb-6 uppercase tracking-tighter">
               Sign Up
             </h3>
+
             <div className="space-y-4">
-              <div className="relative">
-                <input
-                  className={`w-full bg-black/50 border ${usernameStatus === "taken" ? "border-red-500" : "border-white/10"} rounded-lg px-4 py-3 text-xs outline-none transition-all`}
-                  placeholder="Create Username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={step === 2}
-                />
-                {usernameStatus === "checking" && (
-                  <span className="absolute right-3 top-3 text-[9px] text-gray-500 animate-pulse">
-                    Checking...
-                  </span>
-                )}
-                {usernameStatus === "available" && (
-                  <span className="absolute right-3 top-3 text-[9px] text-green-500">
-                    Available
-                  </span>
-                )}
-                {usernameStatus === "taken" && (
-                  <span className="absolute right-3 top-3 text-[9px] text-red-500">
-                    Exists
-                  </span>
-                )}
-              </div>
+              {step === 1 && (
+                <>
+                  <div className="relative">
+                    <input
+                      className={`w-full bg-black/50 border ${usernameStatus === "taken" ? "border-red-500" : "border-white/10"} rounded-lg px-4 py-3 text-xs outline-none transition-all`}
+                      placeholder="Create Username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                    />
+                    {usernameStatus === "checking" && (
+                      <span className="absolute right-3 top-3 text-[9px] text-gray-500 animate-pulse">
+                        Checking...
+                      </span>
+                    )}
+                    {usernameStatus === "available" && (
+                      <span className="absolute right-3 top-3 text-[9px] text-green-500">
+                        Available
+                      </span>
+                    )}
+                    {usernameStatus === "taken" && (
+                      <span className="absolute right-3 top-3 text-[9px] text-red-500">
+                        Exists
+                      </span>
+                    )}
+                  </div>
 
-              <input
-                type="password"
-                className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
-                placeholder="Create Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={step === 2}
-              />
+                  <input
+                    type="password"
+                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                    placeholder="Create Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
 
-              <div className="flex gap-2">
-                <input
-                  type="tel"
-                  className="flex-1 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
-                  placeholder="Mobile Number"
-                  value={mobile}
-                  maxLength={10}
-                  onChange={(e) => setMobile(e.target.value)}
-                  disabled={step === 2}
-                />
-                {step === 1 && (
-                  <Button
-                    onClick={handleGetOTP}
-                    disabled={
-                      isLoading ||
-                      usernameStatus !== "available" ||
-                      mobile.length !== 10
-                    }
-                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] h-auto px-4"
-                  >
-                    GET OTP
-                  </Button>
-                )}
-              </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      className="flex-1 bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
+                      placeholder="Mobile Number"
+                      value={mobile}
+                      maxLength={10}
+                      onChange={(e) => setMobile(e.target.value)}
+                    />
+                    <Button
+                      onClick={handleGetOTP}
+                      disabled={
+                        isLoading ||
+                        usernameStatus !== "available" ||
+                        mobile.length !== 10
+                      }
+                      className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] h-auto px-4"
+                    >
+                      {isLoading ? "..." : "GET OTP"}
+                    </Button>
+                  </div>
+                </>
+              )}
 
               {step === 2 && (
-                <div className="space-y-4 pt-2 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex justify-between items-center text-[9px] text-gray-400 px-1">
-                    <span>Enter OTP</span>
-                    <span className="text-orange-500 font-bold">{timer}s</span>
+                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex flex-col items-center gap-2 mb-2">
+                    {timer > 0 ? (
+                      <span className="text-[10px] text-gray-400">
+                        Time remaining:{" "}
+                        <b className="text-orange-500">{timer}s</b>
+                      </span>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] text-red-500 font-bold uppercase">
+                          OTP Expired
+                        </span>
+                        <Button
+                          onClick={handleGetOTP}
+                          variant="outline"
+                          className="h-7 text-[9px] border-orange-500 text-orange-500 hover:bg-orange-500/10"
+                        >
+                          RESEND OTP
+                        </Button>
+                      </div>
+                    )}
                   </div>
+
                   <input
                     className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-xs outline-none"
                     placeholder="Verify OTP"
@@ -391,13 +430,8 @@ function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
           alt={game.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-all opacity-80"
         />
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="text-[7px] font-black bg-orange-600 px-3 py-1 rounded-full uppercase italic">
-            Play
-          </span>
-        </div>
       </div>
-      <h3 className="text-center mt-2 font-black text-gray-400 group-hover:text-orange-400 transition-colors text-[8px] uppercase tracking-tighter truncate px-1">
+      <h3 className="text-center mt-2 font-black text-gray-400 group-hover:text-orange-400 text-[8px] uppercase truncate px-1">
         {game.name}
       </h3>
     </div>
